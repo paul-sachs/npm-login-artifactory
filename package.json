@@ -2,9 +2,12 @@
   "name": "npm-login-artifactory",
   "version": "1.0.0",
   "description": "Login into artifactory for npm",
-  "main": "index.js",
+  "main": "./index",
   "scripts": {
     "run": "node index.js"
+  },
+  "bin": {
+    "npm-login-artifactory": "./index.js"
   },
   "repository": {
     "type": "git",
@@ -14,11 +17,13 @@
     "npm",
     "artifactory"
   ],
+  "files": [
+    "index.js"
+  ],
   "author": "Paul Sachs",
   "license": "MIT",
   "dependencies": {
     "axios": "^0.18.0",
-    "prompt-async": "^0.9.9",
     "prompts": "^2.0.2"
   }
 }

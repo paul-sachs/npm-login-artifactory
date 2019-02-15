@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
@@ -24,7 +23,11 @@ const main = async () => {
     const configFile = await readFileP(
       path.resolve(process.cwd(), ".npmartrc")
     );
-    config = JSON.parse(configFile.toString());
+    try {
+      config = JSON.parse(configFile.toString());
+    } catch (e) {
+      console.warn("Could not read config: ", e);
+    }
   }
   let finalConfig;
   try {
@@ -52,7 +55,7 @@ const main = async () => {
       },
       {
         name: "registries",
-        initial: config.registries.join(","),
+        initial: config.registries ? config.registries.join(",") : "",
         type: "list",
         message: "Enter registries",
         validate: value =>
@@ -62,13 +65,14 @@ const main = async () => {
       {
         name: "useApiKey",
         initial: true,
-        active: 'yes',
-        inactive: 'no',
+        active: "yes",
+        inactive: "no",
         type: "toggle",
         message: "Use API Key instead. Will create it if it doesn't exist."
       }
     ]);
   } catch (e) {
+    console.log("Aborting due to:", e);
     return;
   }
 
