@@ -1,0 +1,23 @@
+{
+  "name": "npm-login-artifactory",
+  "version": "1.0.0",
+  "description": "Login into artifactory for npm",
+  "main": "index.js",
+  "scripts": {
+    "run": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.ibm.com:watson-finance/npm-login-artifactory.git"
+  },
+  "keywords": [
+    "npm",
+    "artifactory"
+  ],
+  "author": "Paul Sachs",
+  "license": "MIT",
+  "dependencies": {
+    "prompt-async": "^0.9.9",
+    "prompts": "^2.0.2"
+  }
+}
