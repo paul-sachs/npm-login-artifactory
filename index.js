@@ -6,6 +6,7 @@ const path = require("path");
 const readline = require("readline");
 const util = require("util");
 const prompts = require("prompts");
+const axios = require("axios");
 
 const q = text => new Promise(resolve => rl.question(text, resolve));
 const existsP = util.promisify(fs.exists);
@@ -16,27 +17,6 @@ const writeFileP = util.promisify(fs.writeFile);
 const outputFilePath = path.resolve(".dump");
 const configFilePath = path.resolve(".npmartrc");
 
-const httpsGet = options =>
-  new Promise((resolve, reject) => {
-    https
-      .get(options, resp => {
-        let data = "";
-
-        // A chunk of data has been recieved.
-        resp.on("data", chunk => {
-          data += chunk;
-        });
-
-        // The whole response has been received. Print out the result.
-        resp.on("end", () => {
-          resolve(data);
-        });
-      })
-      .on("error", err => {
-        reject(err);
-      });
-  });
-
 const main = async () => {
   let config = {};
   const configExists = await existsP(configFilePath);
@@ -46,58 +26,90 @@ const main = async () => {
     );
     config = JSON.parse(configFile.toString());
   }
-
-  const finalConfig = await prompts([
-    {
-      name: "email",
-      initial: config.email,
-      type: "text", //() => (config.email ? null : "text"),
-      message: "Enter your intranet email",
-      validate: i => !!i
-    },
-    {
-      name: "password",
-      initial: config.password,
-      type: "invisible", //() => (config.password ? null : "invisible"),
-      message: "Enter your intranet password",
-      validate: i => !!i
-    },
-    {
-      name: "hostname",
-      initial: config.hostname,
-      type: "text", //() => (config.hostname ? null : "text",
-      message: "Artifactory hostname",
-      validate: i => !!i
-    },
-    {
-      name: "registries",
-      initial: config.registries.join(","),
-      type: "list",
-      message: "Enter registries",
-      validate: value =>
-        /^@[\w-_]+=>[\w-_]+/.test(value) ||
-        "Invalid format. Values must be @<scope>=><repo>. Eg, @fss/ip-wfss-npm-virtual"
-    }
-  ]);
+  let finalConfig;
+  try {
+    finalConfig = await prompts([
+      {
+        name: "email",
+        initial: config.email,
+        type: "text", //() => (config.email ? null : "text"),
+        message: "Enter your intranet email",
+        validate: i => !!i
+      },
+      {
+        name: "password",
+        initial: config.password,
+        type: "invisible", //() => (config.password ? null : "invisible"),
+        message: "Enter your intranet password",
+        validate: i => !!i
+      },
+      {
+        name: "hostname",
+        initial: config.hostname,
+        type: "text", //() => (config.hostname ? null : "text",
+        message: "Artifactory hostname",
+        validate: i => !!i
+      },
+      {
+        name: "registries",
+        initial: config.registries.join(","),
+        type: "list",
+        message: "Enter registries",
+        validate: value =>
+          /^@[\w-_]+=>[\w-_]+/.test(value) ||
+          "Invalid format. Values must be @<scope>=><repo>. Eg, @fss/ip-wfss-npm-virtual"
+      },
+      {
+        name: "useApiKey",
+        initial: true,
+        active: 'yes',
+        inactive: 'no',
+        type: "toggle",
+        message: "Use API Key instead. Will create it if it doesn't exist."
+      }
+    ]);
+  } catch (e) {
+    return;
+  }
 
   const options = {
-    hostname: finalConfig.hostname,
-    port: 443,
+    baseURL: `https://${finalConfig.hostname}/artifactory/api/`,
     path: "/artifactory/api/npm/auth",
-    method: "GET",
-    headers: {
-      Authorization: `Basic ${new Buffer(
-        `${finalConfig.email}:${finalConfig.password}`
-      ).toString("base64")}`
+    auth: {
+      username: finalConfig.email,
+      password: finalConfig.password
     }
   };
+  const axiosInstance = axios.create(options);
 
-  const npmrcExists = await existsP(configFilePath);
+  if (finalConfig.useApiKey) {
+    try {
+      // let's try to get an existing apikey
+      const requestResult = await axiosInstance.get("security/apiKey");
+      options.auth.password = requestResult.data.apiKey;
+    } catch (e) {
+      console.log("Failed to get apiKey, attempting to create apiKey...");
+      try {
+        // try to create it
+        const requestResult = await axiosInstance.post("security/apiKey");
+        options.auth.password = requestResult.data.apiKey;
+      } catch (e) {
+        // if this also fails, we'll fall back on using the provided password
+        console.log(
+          "Failed to create apiKey, defaulting to provided password."
+        );
+      }
+    }
+  }
 
-  const npmGeneralAuth = await httpsGet(options);
-  const _authString = npmGeneralAuth.slice(
-    npmGeneralAuth.indexOf("_auth"),
-    npmGeneralAuth.indexOf("\n")
+  const npmrcExists = await existsP(outputFilePath);
+
+  const npmGeneralAuth = await axiosInstance.get("npm/auth", {
+    responseType: "text"
+  });
+  const _authString = npmGeneralAuth.data.slice(
+    npmGeneralAuth.data.indexOf("_auth"),
+    npmGeneralAuth.data.indexOf("\n")
   );
 
   let finalResult = "";
@@ -119,22 +131,28 @@ const main = async () => {
       .map(i => i.trim());
     const aliasWithoutAt = alias.slice(1);
 
-    const fssSpecificAuth = await httpsGet({
-      ...options,
-      path: `/artifactory/api/npm/${repo}/auth/${aliasWithoutAt}`
-    });
+    const fssSpecificAuth = await axiosInstance.get(
+      `npm/${repo}/auth/${aliasWithoutAt}`,
+      {
+        responseType: "text"
+      }
+    );
 
-    const registryRegExp = new RegExp(`^${alias}:registry\s*=.*\$`, 'gm');
-    const credsRegExp = new RegExp(`^\/\/${options.hostname}:${options.port}/artifactory/api/npm/${repo}/:.*\$`, 'gm')
+    const registryRegExp = new RegExp(`^${alias}:registry\s*=.*\$`, "gm");
+
+    const credsRegExp = new RegExp(
+      `^\/\/${finalConfig.hostname}:443/artifactory/api/npm/${repo}/:.*\$`,
+      "gm"
+    );
     // Delete registry
-    finalResult = finalResult.replace(registryRegExp, '');
+    finalResult = finalResult.replace(registryRegExp, "");
     // Delete auth lines
-    finalResult = finalResult.replace(credsRegExp, '');
+    finalResult = finalResult.replace(credsRegExp, "");
     // Add in new auth lines
-    finalResult = `${finalResult}\n${fssSpecificAuth}\n`;
+    finalResult = `${finalResult}\n${fssSpecificAuth.data}\n`;
   }
 
-  finalResult = finalResult.replace(/\n\s*\n/g, '\n');
+  finalResult = finalResult.replace(/\n\s*\n/g, "\n");
   await writeFileP(outputFilePath, finalResult);
 
   console.log("Success!");

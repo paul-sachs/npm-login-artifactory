@@ -17,6 +17,7 @@
   "author": "Paul Sachs",
   "license": "MIT",
   "dependencies": {
+    "axios": "^0.18.0",
     "prompt-async": "^0.9.9",
     "prompts": "^2.0.2"
   }
