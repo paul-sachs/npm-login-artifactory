@@ -13,7 +13,7 @@ const readFileP = util.promisify(fs.readFile);
 const appendFileP = util.promisify(fs.appendFile);
 const writeFileP = util.promisify(fs.writeFile);
 
-const outputFilePath = path.resolve(".dump");
+const outputFilePath = path.resolve(".npmrc");
 const configFilePath = path.resolve(".npmartrc");
 
 const main = async () => {
