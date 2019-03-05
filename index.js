@@ -49,6 +49,12 @@ const command = optimist
   .options("h", {
     alias: "help",
     describe: "Provide usage information"
+  })
+  .boolean("z")
+  .options("z", {
+    alias: "skipAuth",
+    describe:
+      "By default, we set the _auth key in npmrc but this seems to have issues. Experimentally remove the _auth property from exported npmrc file."
   });
 
 const argv = command.argv;
@@ -63,7 +69,8 @@ const consoleConfig = {
   registries: argv.r ? argv.r.split(",") : [],
   email: argv.e,
   password: argv.p,
-  useApiKey: !argv.x
+  useApiKey: !argv.x,
+  skipAuth: argv.z
 };
 
 const main = async () => {
@@ -86,7 +93,7 @@ const main = async () => {
   };
   if (!argv.q) {
     try {
-        config = await prompts([
+      config = await prompts([
         {
           name: "email",
           initial: config.email,
@@ -124,6 +131,15 @@ const main = async () => {
           inactive: "no",
           type: "toggle",
           message: "Use API Key instead. Will create it if it doesn't exist."
+        },
+        {
+          name: "skipAuth",
+          initial: config.skipAuth,
+          active: "yes",
+          inactive: "no",
+          type: "toggle",
+          message:
+            "Prevent inserting _auth into npmrc. Experimental but may help with CI."
         }
       ]);
     } catch (e) {
@@ -131,13 +147,20 @@ const main = async () => {
       return;
     }
   } else {
-      // validate that the config has everything we need
-      const missingParams = ['hostname', 'registries', 'email', 'password'].filter(r => !config[r] || config[r].length === 0);
-      if (missingParams.length > 0) {
-          console.error(`Missing some required parameters: ${missingParams.join(', ')}`);
-          command.showHelp();
-          return;
-      }
+    // validate that the config has everything we need
+    const missingParams = [
+      "hostname",
+      "registries",
+      "email",
+      "password"
+    ].filter(r => !config[r] || config[r].length === 0);
+    if (missingParams.length > 0) {
+      console.error(
+        `Missing some required parameters: ${missingParams.join(", ")}`
+      );
+      command.showHelp();
+      return;
+    }
   }
 
   const options = {
@@ -174,32 +197,31 @@ const main = async () => {
   }
 
   const npmrcExists = await existsP(outputFilePath);
-
-  const npmGeneralAuth = await axiosInstance.get("npm/auth", {
-    responseType: "text"
-  });
-  const _authString = npmGeneralAuth.data.slice(
-    npmGeneralAuth.data.indexOf("_auth"),
-    npmGeneralAuth.data.indexOf("\n")
-  );
-
   let finalResult = "";
+
   if (npmrcExists) {
     const existingOutputFileContents = await readFileP(outputFilePath);
     finalResult = existingOutputFileContents.toString();
   }
 
-  const authRegExp = /^_auth\s*=\s*\S*$/gm;
-  if (authRegExp.test(finalResult)) {
-    finalResult = finalResult.replace(authRegExp, _authString);
-  } else {
-    finalResult = `${finalResult}\n${_authString}`;
+  if (!config.skipAuth) {
+    const npmGeneralAuth = await axiosInstance.get("npm/auth", {
+      responseType: "text"
+    });
+    const _authString = npmGeneralAuth.data.slice(
+      npmGeneralAuth.data.indexOf("_auth"),
+      npmGeneralAuth.data.indexOf("\n")
+    );
+    const authRegExp = /^_auth\s*=\s*\S*$/gm;
+    if (authRegExp.test(finalResult)) {
+      finalResult = finalResult.replace(authRegExp, _authString);
+    } else {
+      finalResult = `${finalResult}\n${_authString}`;
+    }
   }
 
   for (let i = 0; i < config.registries.length; i++) {
-    const [alias, repo] = config.registries[i]
-      .split("=>")
-      .map(i => i.trim());
+    const [alias, repo] = config.registries[i].split("=>").map(i => i.trim());
     const aliasWithoutAt = alias.slice(1);
 
     console.log(`Fetching registry information for ${config.registries[i]}...`);
