@@ -3,13 +3,13 @@
 Simplify configuring your npmrc file for using artifactory credentials with npm. It is designed to be run as a CLI, installed through npm or npx:
 
 ```bash
-npx git+ssh://git@github.ibm.com:watson-finance/npm-login-artifactory.git
+npx https://github.com/psachs21/npm-login-artifactory.git
 ```
 
 or
 
 ```bash
-npm i -g git+ssh://git@github.ibm.com:watson-finance/npm-login-artifactory.git
+npm i https://github.com/psachs21/npm-login-artifactory.git
 npm-login-artifactory
 ```
 
@@ -26,3 +26,11 @@ You can preconfigure an npmartrc so the tool can read some defaults:
     "registries": ["@fss=>ip-wfss-npm-virtual"]
 }
 ```
+
+## Options
+
+- hostname: (string) hostname to your artifactory repository
+- registries: (string[]) list of registries to map scopes to registries. Format is @<scope> => <repo_name>
+- email: (string) user email to login via
+- password: (string) password or api key
+- skipApiKey: (boolean) if enabled, store the password in your npmrc file. Otherwise the tool will try to fetch an api key from artifactory
